@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "Runway",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "OBJECTID": 1, "RUNWAY": "03/21", "LENGTH_M": 3000.0, "WIDTH_M": 45.0, "BRG_03": 31.5, "BRG_21": 211.51, "THR03_ELEV": 1633.0, "THR21_ELEV": 1571.0, "SLOPE_03": -0.6, "SLOPE_21": 0.6, "SURFACE": "CONC_ASPH", "Shape_Length": 0.059620702588784776, "Shape_Area": 1.406265947734898e-05 }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 46.733550440000045, 39.10172534000003, 0.0 ], [ 46.751672590000055, 39.124772560000054, 0.0 ], [ 46.752116300000068, 39.124560770000073, 0.0 ], [ 46.733994, 39.10151355000005, 0.0 ], [ 46.733550440000045, 39.10172534000003, 0.0 ] ] ] ] } }
+]
+}

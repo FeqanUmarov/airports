@@ -1,0 +1,24 @@
+{
+  "name": "airport-gis-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mapbox/shp-write": "^0.4.3",
+    "cesium": "1.134.1",
+    "jspdf": "^2.5.2",
+    "lucide": "^0.468.0",
+    "ol": "^10.6.1",
+    "polygon-clipping": "^0.15.7",
+    "shpjs": "^6.2.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11",
+    "vite-plugin-static-copy": "^2.3.2"
+  }
+}
