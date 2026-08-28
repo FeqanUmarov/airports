@@ -228,7 +228,11 @@ export class EntityManager {
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
-        text: 'TƏYYARƏ',
+        text: new Cesium.CallbackProperty(() => {
+          const point = interpolateFlightPoint(geometry, getFlightAnimationRatio());
+
+          return `${Math.round(point.height)} m`;
+        }, false),
         font: '800 12px Inter, sans-serif',
         fillColor: Cesium.Color.WHITE,
         outlineColor: Cesium.Color.BLACK.withAlpha(0.75),
