@@ -48,7 +48,7 @@ export function toolbar() {
       <label class="airport-picker">
         <span class="visually-hidden">Airport</span>
         <select aria-label="Airport selector">
-          <option>Zəngilan International Airport</option>
+          <option>Zəngilan Beynəlxalq Hava Limanı</option>
         </select>
       </label>
 

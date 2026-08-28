@@ -758,7 +758,7 @@ function showFlightPathExplanation() {
       <div>
         <span class="tour-kicker">Uçuş Trayektoriyası Demosu</span>
         <strong>Uçuş zolağı hərəkəti və qalxış xətti</strong>
-        <small>Təyyarə əvvəl uçuş zolağı üzərində hərəkət edir, sonra 3.0 dərəcə qalxış koridoruna daxil olur.</small>
+        <small>Təyyarə zolaqda sürətlənir, yumşaq qalxır və takeoff səthinin meylinə uyğun uzaqlaşaraq gözdən itir.</small>
       </div>
       <div class="flight-path-legend">
         <span><i class="flight-line"></i>Uçuş zolağı hərəkəti və ardından qalxış</span>

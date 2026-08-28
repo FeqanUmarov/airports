@@ -5,6 +5,7 @@ import { rightPanel } from './ui/rightPanel.js';
 import { attributeTable, renderFeatureAttributes, renderTableMessage } from './ui/attributeTable.js';
 import { initializeLayoutExport } from './ui/pdfExport.js';
 import { statusbar } from './ui/statusbar.js';
+import { setFlightSoundActive } from './audio/flightSound.js';
 import { initializeMap2D } from './viewer/map2d.js';
 import { checkBuildingFootprint } from './analysis/buildingCheck.js';
 import { readBuildingFromZip } from './data/shapefile.js';
@@ -426,6 +427,7 @@ function initializeFlightPathDemo(root, viewerState) {
     }
 
     button.disabled = true;
+    setFlightSoundActive(true);
 
     try {
       await ensureMap3D(root, viewerState);
@@ -436,6 +438,8 @@ function initializeFlightPathDemo(root, viewerState) {
 
       const isVisible = await viewerState.entityManager3D?.toggleFlightPathDemo();
 
+      setFlightSoundActive(Boolean(isVisible));
+
       button.classList.toggle('is-active', Boolean(isVisible));
       button.setAttribute('aria-pressed', String(Boolean(isVisible)));
       setFlightPathExplanationVisible(Boolean(isVisible));
@@ -443,6 +447,9 @@ function initializeFlightPathDemo(root, viewerState) {
       if (isVisible) {
         viewerState.entityManager3D?.zoomToLayer('flight-path');
       }
+    } catch (error) {
+      setFlightSoundActive(false);
+      throw error;
     } finally {
       button.disabled = false;
     }

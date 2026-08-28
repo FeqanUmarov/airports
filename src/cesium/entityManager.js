@@ -4,6 +4,8 @@ import { airportLayers } from '../config/airportLayers.js';
 import { collectLineStrings, createAirport3DContext, createSurfaceHeightResolver } from './surfaceGeometry.js';
 import { runwayPresentation } from '../layers/presentation.js';
 
+let flightAnimationStartedAt = Date.now();
+
 export class EntityManager {
   #viewer;
   #dataSources;
@@ -219,6 +221,8 @@ export class EntityManager {
         image: getAircraftIconCanvas(),
         width: 46,
         height: 46,
+        color: new Cesium.CallbackProperty(() => Cesium.Color.WHITE.withAlpha(getFlightVisibility()), false),
+        scale: new Cesium.CallbackProperty(() => 0.38 + getFlightVisibility() * 0.62, false),
         rotation: geometry.heading + Cesium.Math.toRadians(300),
         alignedAxis: Cesium.Cartesian3.UNIT_Z,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -233,6 +237,7 @@ export class EntityManager {
         pixelOffset: new Cesium.Cartesian2(0, -26),
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        show: new Cesium.CallbackProperty(() => getFlightVisibility() > 0.32, false),
       },
     });
 
@@ -265,6 +270,10 @@ export class EntityManager {
 
   async setFlightPathDemoVisible(isVisible) {
     const layer = this.getLayer('flight-path') ?? await this.loadFlightPathDemo();
+
+    if (isVisible) {
+      flightAnimationStartedAt = Date.now();
+    }
 
     layer.show = isVisible;
     this.#viewer.scene.requestRender();
@@ -646,31 +655,37 @@ export class EntityManager {
     const origin = { longitude: runwayStart[0], latitude: runwayStart[1] };
     const runwayLength = geographicDistance(runwayStart, runwayEnd);
     const totalSurfaceLength = Number(departureProperties.TOTAL_LEN_M) || 15000;
-    const climbLength = Math.min(totalSurfaceLength, 9000);
+    const climbLength = Math.min(totalSurfaceLength, 15000);
     const length = runwayLength + climbLength;
     const innerWidth = Number(departureProperties.INNER_WIDTH_M) || 180;
     const finalWidth = Number(departureProperties.FINAL_WIDTH_M) || 1200;
     const divergenceLength = Number(departureProperties.DIV_LEN_M) || 4080;
     const corridorWidth = finalWidth;
-    const runwayHeight = 5;
+    const runwayHeight = 3;
     const takeoffSurfaceSlope = (Number(departureProperties.SLOPE_PCT) || 2) / 100;
-    const glideSlopeDegrees = Math.max(3, Cesium.Math.toDegrees(Math.atan(takeoffSurfaceSlope)) + 1);
-    const climbStartHeight = 12;
-    const endHeight = climbStartHeight + Math.tan(Cesium.Math.toRadians(glideSlopeDegrees)) * climbLength;
-    const samples = 96;
+    const glideSlopeDegrees = Cesium.Math.toDegrees(Math.atan(takeoffSurfaceSlope));
+    const rotationStart = runwayLength * 0.72;
+    const climbStartHeight = runwayHeight + 8;
+    const endHeight = climbStartHeight + takeoffSurfaceSlope * climbLength;
+    const samples = 160;
     const pathPoints = Array.from({ length: samples }, (_, index) => {
       const ratio = index / (samples - 1);
       const along = ratio * length;
       const climbDistance = Math.max(0, along - runwayLength);
-      const height = along <= runwayLength
-        ? runwayHeight
-        : climbStartHeight + Math.tan(Cesium.Math.toRadians(glideSlopeDegrees)) * climbDistance;
+      let height = runwayHeight;
+
+      if (along > rotationStart && along <= runwayLength) {
+        const rotationRatio = (along - rotationStart) / (runwayLength - rotationStart);
+        height = runwayHeight + (climbStartHeight - runwayHeight) * easeInOutCubic(rotationRatio);
+      } else if (along > runwayLength) {
+        height = climbStartHeight + takeoffSurfaceSlope * climbDistance;
+      }
       const coordinate = offsetCoordinate(origin, along, 0, heading);
 
       return {
         ...coordinate,
         height,
-        phase: along <= runwayLength ? 'runway-roll' : 'climb',
+        phase: along <= rotationStart ? 'runway-roll' : (along <= runwayLength ? 'rotation' : 'climb'),
       };
     });
     const corridorSurfaceHeight = (climbDistance) => climbStartHeight + climbDistance * takeoffSurfaceSlope + 4;
@@ -1723,9 +1738,35 @@ function interpolateFlightPoint(geometry, ratio) {
 }
 
 function getFlightAnimationRatio() {
-  const durationMs = 7200;
+  const durationMs = 13500;
+  const cycleRatio = ((Date.now() - flightAnimationStartedAt) % durationMs) / durationMs;
 
-  return (Date.now() % durationMs) / durationMs;
+  // Accelerating ground roll, smooth rotation, then a long departure that
+  // visually recedes before the next cycle starts.
+  if (cycleRatio < 0.3) {
+    const groundRatio = cycleRatio / 0.3;
+    return 0.095 * groundRatio * groundRatio;
+  }
+
+  if (cycleRatio < 0.42) {
+    return 0.095 + 0.055 * easeInOutCubic((cycleRatio - 0.3) / 0.12);
+  }
+
+  if (cycleRatio < 0.94) {
+    return 0.15 + 0.85 * easeOutCubic((cycleRatio - 0.42) / 0.52);
+  }
+
+  return 1;
+}
+
+function getFlightVisibility() {
+  const cycleRatio = ((Date.now() - flightAnimationStartedAt) % 13500) / 13500;
+
+  if (cycleRatio < 0.78) {
+    return 1;
+  }
+
+  return Math.max(0, 1 - (cycleRatio - 0.78) / 0.16);
 }
 
 function getObstacleStatus(clearance) {

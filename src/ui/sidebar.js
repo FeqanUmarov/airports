@@ -26,7 +26,7 @@ export function sidebar() {
             <button class="tree-parent" type="button" data-tree-toggle aria-expanded="true">
               <i class="tree-chevron" data-lucide="chevron-right"></i>
               <span class="node-icon"><i data-lucide="plane-takeoff"></i></span>
-              <span>Zəngilan International Airport</span>
+              <span>Zəngilan Beynəlxalq Hava Limanı</span>
             </button>
             <div class="tree-children">
               <div data-airport-layer-list>${createLayerTreeMarkup()}</div>
