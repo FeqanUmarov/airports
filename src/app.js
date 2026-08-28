@@ -31,6 +31,7 @@ export async function initializeApp() {
     measureTool2D: null,
     buildingDrawTool2D: null,
     setIdentify2D: null,
+    setBasemap2D: null,
     identifyActive: false,
     showBuildingFootprint: null,
     clearBuildingFootprint: null,
@@ -107,6 +108,7 @@ export async function initializeApp() {
   viewerState.measureTool2D = map2DState.measureTool;
   viewerState.buildingDrawTool2D = map2DState.buildingDrawTool;
   viewerState.setIdentify2D = map2DState.setIdentifyActive;
+  viewerState.setBasemap2D = map2DState.setBasemap;
   viewerState.showBuildingFootprint = map2DState.showBuildingFootprint;
   viewerState.clearBuildingFootprint = map2DState.clearBuildingFootprint;
   viewerState.setIdentify2D(viewerState.identifyActive);
@@ -233,7 +235,7 @@ function initializeBuildingCheck(root, viewerState) {
     if (invalidCoordinate || !Number.isFinite(heightMeters) || heightMeters <= 0) {
       resultBox.hidden = false;
       resultBox.className = 'building-check-result is-error';
-      resultBox.textContent = 'Enter four valid WGS84 coordinate pairs and a positive height.';
+      resultBox.textContent = 'Dörd düzgün WGS84 koordinat cütü və sıfırdan böyük bina hündürlüyü daxil edin.';
       return;
     }
 
@@ -246,7 +248,7 @@ function initializeBuildingCheck(root, viewerState) {
     } catch (error) {
       resultBox.hidden = false;
       resultBox.className = 'building-check-result is-error';
-      resultBox.textContent = `Analysis failed: ${error.message}`;
+      resultBox.textContent = `Təhlil zamanı xəta baş verdi: ${error.message}`;
     } finally {
       submitButton.disabled = false;
     }
@@ -256,19 +258,23 @@ function initializeBuildingCheck(root, viewerState) {
 function renderBuildingCheckResult(container, result) {
   container.hidden = false;
   container.className = `building-check-result ${result.violation ? 'is-violation' : 'is-clear'}`;
-  const title = result.violation ? 'OLS violation detected' : (result.intersectsAnySurface ? 'No height violation' : 'No OLS footprint intersection');
+  const title = result.violation
+    ? 'OLS səthi pozuntusu aşkarlandı'
+    : (result.intersectsAnySurface ? 'Hündürlük pozuntusu yoxdur' : 'Bina heç bir OLS səthi ilə kəsişmir');
   const rows = result.surfaceReport.map((item) => `
     <tr>
       <td>${item.layerTitle}</td>
       <td>${item.overlapsFootprint ? `${item.maximumHeight.toFixed(2)} m` : '—'}</td>
+      <td>${item.violation ? `${item.penetrationMeters.toFixed(2)} m` : '—'}</td>
       <td>${item.status}</td>
       <td>${item.message}</td>
     </tr>`).join('');
   container.innerHTML = `
     <strong>${title}</strong>
-    <span>Building height: ${result.heightMeters.toFixed(2)} m</span>
-    <span>Blue/green shows the full building footprint; red with a yellow outline shows only the part causing an OLS violation. Heights are above local ground.</span>
-    ${rows ? `<div class="building-result-table"><table><thead><tr><th>Surface</th><th>Max clear height</th><th>Status</th><th>Meaning</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}`;
+    <span>Bina hündürlüyü: ${result.heightMeters.toFixed(2)} m</span>
+    ${result.violation ? `<span><strong>Maksimum OLS pozuntu dərinliyi: ${result.maximumPenetrationMeters.toFixed(2)} m</strong></span>` : ''}
+    <span>Mavi/yaşıl rəng binanın tam konturunu, qırmızı-narıncı rəng isə yalnız OLS səthinin üzərində qalan pozuntu hissəsini göstərir. Hündürlüklər yerli yer səviyyəsinə nəzərən hesablanır.</span>
+    ${rows ? `<div class="building-result-table"><table><thead><tr><th>Səth</th><th>Maksimum icazəli hündürlük</th><th>Pozuntu dərinliyi</th><th>Status</th><th>İzah</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}`;
 }
 
 function initializeBuildingDrawing(root, viewerState) {
@@ -546,6 +552,13 @@ function initializeLayerControls(root, viewerState) {
   root.dataset.layerControlsReady = 'true';
 
   root.addEventListener('change', (event) => {
+    const basemapRadio = event.target.closest('[data-basemap-toggle]');
+
+    if (basemapRadio) {
+      viewerState.setBasemap2D?.(basemapRadio.value);
+      return;
+    }
+
     const checkbox = event.target.closest('[data-layer-toggle]');
 
     if (!checkbox) {

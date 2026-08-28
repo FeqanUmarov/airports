@@ -61,8 +61,8 @@ export function showBuildingCheck3D(result, flyTo = true) {
   clearBuildingCheck3D();
   const topElevation = result.buildingTopElevation;
   const footprintEntity = viewer.entities.add({
-    name: 'Checked Building', layerId: 'building-check-3d', layerTitle: 'Building Check',
-    properties: { HEIGHT_M: result.heightMeters, STATUS: result.violation ? 'OLS VIOLATION' : 'CLEAR' },
+    name: 'Yoxlanılan bina', layerId: 'building-check-3d', layerTitle: 'Bina yoxlaması',
+    properties: { BİNA_HÜNDÜRLÜYÜ_M: result.heightMeters, STATUS: result.violation ? 'OLS POZUNTUSU' : 'TƏHLÜKƏSİZ' },
     polygon: {
       hierarchy: createPolygonHierarchy([result.coordinates]), height: 1.5, extrudedHeight: topElevation,
       material: Cesium.Color.fromCssColorString(result.violation ? '#3b82f6' : '#22c55e').withAlpha(0.62),
@@ -72,15 +72,31 @@ export function showBuildingCheck3D(result, flyTo = true) {
   buildingCheckEntities.push(footprintEntity);
 
   result.conflictPolygons.forEach((conflict, index) => {
+    const conflictHierarchy = conflict.surfaceCoordinates?.length
+      ? createHeightPolygonHierarchy(offsetPolygonHeights(conflict.surfaceCoordinates, 0.15))
+      : createPolygonHierarchy(conflict.coordinates);
     buildingCheckEntities.push(viewer.entities.add({
-      name: `Conflict — ${conflict.layerTitle}`, layerId: `building-conflict-${conflict.layerId}`, layerTitle: conflict.layerTitle,
-      properties: { SURFACE: conflict.layerTitle, STATUS: 'VIOLATION', BUILDING_HEIGHT_M: result.heightMeters },
+      name: `Pozuntu hissəsi — ${conflict.layerTitle}`, layerId: `building-conflict-${conflict.layerId}`, layerTitle: conflict.layerTitle,
+      properties: {
+        SƏTH: conflict.layerTitle,
+        STATUS: 'POZUNTU',
+        BİNA_HÜNDÜRLÜYÜ_M: result.heightMeters,
+        POZUNTU_DƏRİNLİYİ_M: conflict.penetrationMeters,
+      },
       polygon: {
-        hierarchy: createPolygonHierarchy(conflict.coordinates), height: 1.55, extrudedHeight: topElevation + 0.35,
-        material: Cesium.Color.RED.withAlpha(0.72), outline: true, outlineColor: Cesium.Color.YELLOW,
+        hierarchy: conflictHierarchy,
+        perPositionHeight: Boolean(conflict.surfaceCoordinates?.length),
+        height: conflict.surfaceCoordinates?.length ? undefined : 1.55,
+        extrudedHeight: topElevation + 0.4,
+        material: Cesium.Color.ORANGERED.withAlpha(0.86),
+        outline: true,
+        outlineColor: Cesium.Color.YELLOW,
+        closeTop: true,
+        closeBottom: true,
       },
       label: index === 0 ? {
-        text: `OLS CONFLICT\n${conflict.layerTitle}`, font: '600 14px sans-serif', fillColor: Cesium.Color.WHITE,
+        text: `OLS POZUNTUSU: ${conflict.penetrationMeters.toFixed(2)} m\n${conflict.layerTitle}`,
+        font: '600 14px sans-serif', fillColor: Cesium.Color.WHITE,
         showBackground: true, backgroundColor: Cesium.Color.DARKRED.withAlpha(0.9),
         pixelOffset: new Cesium.Cartesian2(0, -34), verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       } : undefined,
@@ -102,6 +118,15 @@ export function clearBuildingCheck3D() {
 function createPolygonHierarchy(rings) {
   const toPositions = (ring) => Cesium.Cartesian3.fromDegreesArray(ring.flatMap((coordinate) => coordinate.slice(0, 2)));
   return new Cesium.PolygonHierarchy(toPositions(rings[0]), rings.slice(1).map((hole) => new Cesium.PolygonHierarchy(toPositions(hole))));
+}
+
+function createHeightPolygonHierarchy(rings) {
+  const toPositions = (ring) => Cesium.Cartesian3.fromDegreesArrayHeights(ring.flatMap((coordinate) => coordinate.slice(0, 3)));
+  return new Cesium.PolygonHierarchy(toPositions(rings[0]), rings.slice(1).map((hole) => new Cesium.PolygonHierarchy(toPositions(hole))));
+}
+
+function offsetPolygonHeights(rings, offset) {
+  return rings.map((ring) => ring.map(([longitude, latitude, height]) => [longitude, latitude, height + offset]));
 }
 
 function conflictCenter(rings, height) {
@@ -969,6 +994,12 @@ function createPopup() {
   element.append(content);
   container.append(element);
 
+  content.addEventListener('click', (event) => {
+    if (event.target.closest('[data-popup-close]')) {
+      element.hidden = true;
+    }
+  });
+
   return { element, content };
 }
 
@@ -1050,9 +1081,11 @@ function createAttributeAdapter(entity) {
 
 function createPopupContent(attributes, entity = null) {
   const entries = Object.entries(attributes);
+  const title = entity?.layerId === 'obstacles' ? 'Maneə clearance yoxlaması' : 'Obyekt atributları';
+  const header = createPopupHeader(title);
 
   if (entries.length === 0) {
-    return '<div class="popup-empty">No attributes</div>';
+    return `${header}<div class="popup-empty">No attributes</div>`;
   }
 
   const rows = entries
@@ -1064,9 +1097,22 @@ function createPopupContent(attributes, entity = null) {
     `)
     .join('');
 
-  const title = entity?.layerId === 'obstacles' ? 'Maneə clearance yoxlaması' : 'Obyekt atributları';
+  return `${header}${rows}`;
+}
 
-  return `<div class="popup-title">${title}</div>${rows}`;
+function createPopupHeader(title) {
+  return `
+    <div class="popup-header">
+      <span class="popup-heading">
+        <span class="popup-eyebrow">Identify Result</span>
+        <span class="popup-title">${escapeHtml(title)}</span>
+      </span>
+      <button class="popup-close" type="button" data-popup-close aria-label="Close popup" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6 6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>`;
 }
 
 function formatValue(value) {

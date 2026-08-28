@@ -5,6 +5,16 @@ import polygonClipping from 'polygon-clipping';
 
 let dataPromise;
 
+const surfaceTitlesAz = {
+  conical: 'Konusvari səth',
+  innerHorizontal: 'Daxili üfüqi səth',
+  approach03: 'RWY 03 yanaşma səthi',
+  approach21: 'RWY 21 yanaşma səthi',
+  takeoff03: 'RWY 03 qalxma səthi',
+  takeoff21: 'RWY 21 qalxma səthi',
+  transitional: 'Keçid səthi',
+};
+
 export async function checkBuildingFootprint(coordinates, heightMeters) {
   const data = await loadAnalysisData();
   const closedFootprint = closeRing(coordinates);
@@ -24,7 +34,7 @@ export async function checkBuildingFootprint(coordinates, heightMeters) {
       const clearance = limitingElevation - buildingTopElevation;
       intersections.push({
         layerId: config.id,
-        layerTitle: config.title,
+        layerTitle: localizeSurfaceTitle(config.id, config.title),
         featureIndex,
         limitingElevation,
         buildingTopElevation,
@@ -38,11 +48,16 @@ export async function checkBuildingFootprint(coordinates, heightMeters) {
           heightAt,
           buildingTopElevation,
           config.id,
-          config.title,
+          localizeSurfaceTitle(config.id, config.title),
         ));
       }
     });
   });
+
+  const maximumPenetrationMeters = intersections.reduce(
+    (maximum, item) => Math.max(maximum, item.violation ? -item.clearance : 0),
+    0,
+  );
 
   return {
     coordinates: closedFootprint,
@@ -51,6 +66,7 @@ export async function checkBuildingFootprint(coordinates, heightMeters) {
     intersections,
     intersectsAnySurface: intersections.length > 0,
     violation: intersections.some((item) => item.violation),
+    maximumPenetrationMeters,
     surfaceReport: olsAirportLayers.map((surface) => createSurfaceReport(surface, intersections)),
     conflictPolygons,
   };
@@ -61,24 +77,28 @@ function createSurfaceReport(surface, intersections) {
   if (!matches.length) {
     return {
       layerId: surface.id,
-      layerTitle: surface.title,
+      layerTitle: localizeSurfaceTitle(surface.id, surface.title),
       overlapsFootprint: false,
-      status: 'OUTSIDE FOOTPRINT',
-      message: 'No building height can affect this surface at the entered location.',
+      status: 'KƏNARDA',
+      message: 'Daxil edilən mövqedə bina bu səthin əhatə dairəsinə düşmür.',
     };
   }
   const limitingElevation = Math.min(...matches.map((item) => item.limitingElevation));
   const maximumHeight = Math.max(0, limitingElevation - 1.5);
   const violation = matches.some((item) => item.violation);
+  const penetrationMeters = Math.max(0, ...matches.map((item) => -item.clearance));
   return {
     layerId: surface.id,
-    layerTitle: surface.title,
+    layerTitle: localizeSurfaceTitle(surface.id, surface.title),
     overlapsFootprint: true,
     limitingElevation,
     maximumHeight,
     violation,
-    status: violation ? 'VIOLATION' : 'CLEAR',
-    message: `Touches at ${maximumHeight.toFixed(2)} m; heights above this value violate the surface.`,
+    penetrationMeters,
+    status: violation ? 'POZUNTU' : 'TƏHLÜKƏSİZ',
+    message: violation
+      ? `Bina OLS səthini ${penetrationMeters.toFixed(2)} m aşır.`
+      : `İcazə verilən maksimum bina hündürlüyü ${maximumHeight.toFixed(2)} m-dir.`,
   };
 }
 
@@ -112,7 +132,23 @@ function calculateConflictPolygons(footprint, geometry, heightAt, buildingTopEle
   });
 
   if (!pieces.length) return [];
-  return polygonClipping.union(...pieces).map((coordinates) => ({ layerId, layerTitle, coordinates }));
+  return polygonClipping.union(...pieces).map((coordinates) => {
+    const surfaceCoordinates = coordinates.map((ring) => ring.map(([longitude, latitude]) => [
+      longitude,
+      latitude,
+      heightAt([longitude, latitude]),
+    ]));
+    const surfaceElevations = surfaceCoordinates.flat().map((coordinate) => coordinate[2]).filter(Number.isFinite);
+    const penetrationMeters = surfaceElevations.length
+      ? Math.max(0, buildingTopElevation - Math.min(...surfaceElevations))
+      : 0;
+
+    return { layerId, layerTitle, coordinates, surfaceCoordinates, penetrationMeters };
+  });
+}
+
+function localizeSurfaceTitle(layerId, fallback) {
+  return surfaceTitlesAz[layerId] ?? fallback;
 }
 
 function ringExtent(ring) {
@@ -139,11 +175,15 @@ function getOverlapSamples(footprint, geometry, buildingSamples) {
   const samples = [];
   getPolygonRings(geometry).forEach((rings) => {
     const outer = rings[0];
-    buildingSamples.filter((point) => pointInRing(point, outer)).forEach((point) => samples.push(point));
-    outer.filter((point) => pointInRing(point, footprint)).forEach((point) => samples.push(point));
-    segmentIntersections(footprint, outer).forEach((point) => samples.push(point));
+    buildingSamples.filter((point) => pointInPolygon(point, rings)).forEach((point) => samples.push(point));
+    rings.flat().filter((point) => pointInRing(point, footprint)).forEach((point) => samples.push(point));
+    rings.forEach((ring) => segmentIntersections(footprint, ring).forEach((point) => samples.push(point)));
   });
   return uniquePoints(samples);
+}
+
+function pointInPolygon(point, rings) {
+  return pointInRing(point, rings[0]) && !rings.slice(1).some((hole) => pointInRing(point, hole));
 }
 
 function getPolygonRings(geometry) {

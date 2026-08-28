@@ -44,13 +44,38 @@ export function sidebar() {
         </section>
       </section>
 
-      <section class="tab-panel empty-panel" role="tabpanel" data-tab-panel="layers" hidden>
+      <section class="tab-panel" role="tabpanel" data-tab-panel="layers" hidden>
         <div class="tree" data-layer-tab-list>
           <div data-airport-layer-list>${createLayerTreeMarkup()}</div>
         </div>
+        ${createBasemapMarkup()}
       </section>
     </aside>
   `;
+}
+
+function createBasemapMarkup() {
+  return `
+    <section class="basemap-section" aria-labelledby="basemap-title">
+      <div class="basemap-heading" id="basemap-title">
+        <span class="node-icon"><i data-lucide="map"></i></span>
+        <span>Basemap</span>
+      </div>
+      <div class="basemap-options" role="radiogroup" aria-label="Select basemap">
+        <label class="basemap-option">
+          <input type="radio" name="basemap" value="osm" data-basemap-toggle checked />
+          <span class="basemap-preview basemap-preview-osm" aria-hidden="true"><i data-lucide="map"></i></span>
+          <span class="basemap-copy"><strong>OpenStreetMap</strong><small>Street map</small></span>
+          <span class="basemap-check"><i data-lucide="check"></i></span>
+        </label>
+        <label class="basemap-option">
+          <input type="radio" name="basemap" value="google-satellite" data-basemap-toggle />
+          <span class="basemap-preview basemap-preview-satellite" aria-hidden="true"><i data-lucide="satellite"></i></span>
+          <span class="basemap-copy"><strong>Google Satellite</strong><small>Satellite imagery</small></span>
+          <span class="basemap-check"><i data-lucide="check"></i></span>
+        </label>
+      </div>
+    </section>`;
 }
 
 export function renderAirportLayerControls(root, layerManager) {

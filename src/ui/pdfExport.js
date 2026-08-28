@@ -96,7 +96,7 @@ export async function generateAirportMapPdf(options) {
   doc.save(`airport-gis-layout-${options.paper.toLowerCase()}-${options.orientation}.pdf`);
 }
 
-async function buildAirportMapPdfDocument(options) {
+export async function buildAirportMapPdfDocument(options) {
   const configs = airportLayers.filter((config) => config.id !== 'runwayLine' && options.visibleLayerIds.includes(config.id));
   const layerData = await Promise.all(configs.map(async (config) => ({ config, geoJson: await loadGeoJson(config.path) })));
   const doc = new jsPDF({
@@ -158,9 +158,16 @@ function showLayoutPreview(root, blobUrl) {
   modal.innerHTML = `
     <section class="layout-preview-dialog" role="dialog" aria-modal="true" aria-label="PDF layout preview">
       <header class="layout-preview-header">
-        <div>
-          <span>Layout Preview</span>
-          <strong>Airport GIS PDF Map</strong>
+        <div class="layout-preview-heading">
+          <span class="layout-preview-icon"><i data-lucide="map"></i></span>
+          <div>
+            <span>Layout Preview</span>
+            <strong>Airport GIS Presentation Map</strong>
+          </div>
+        </div>
+        <div class="layout-preview-meta" aria-label="Document details">
+          <span>PDF</span>
+          <span>Print ready</span>
         </div>
         <div class="layout-preview-actions">
           <button class="secondary-button" type="button" data-download-preview-pdf>
@@ -259,35 +266,43 @@ function drawTitle(doc, layout, options) {
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(7, 31, 61);
+  setRgb(doc, 'fill', '#0b4f73');
+  doc.roundedRect(layout.x, layout.y - 2, 24, 8, 1.2, 1.2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(6.2);
+  doc.text('AIRPORT GIS', layout.x + 12, layout.y + 3, { align: 'center' });
+  doc.setTextColor(15, 38, 64);
   doc.setFontSize(14);
-  doc.text('ZENGILAN INTERNATIONAL AIRPORT', layout.x + layout.width / 2, layout.y + 4, { align: 'center' });
+  doc.text('ZENGILAN INTERNATIONAL AIRPORT', layout.x + layout.width / 2, layout.y + 2.8, { align: 'center' });
   doc.setFontSize(8);
-  doc.text('OBSTACLE LIMITATION SURFACES - PRESENTATION MAP', layout.x + layout.width / 2, layout.y + 10, { align: 'center' });
+  doc.setTextColor(63, 84, 105);
+  doc.text('OBSTACLE LIMITATION SURFACES  /  PRESENTATION MAP', layout.x + layout.width / 2, layout.y + 9, { align: 'center' });
 }
 
 function drawOverviewPanel(doc, box, mapData, options) {
   drawPanel(doc, box, '1. OBSTACLE LIMITATION SURFACES (OLS) - OVERVIEW');
-  const mapBox = insetBox(box, 6, 10, 6, 12);
+  const infoHeight = options.enabledElements.Legend ? 27 : 5;
+  const mapBox = insetBox(box, 5, 9, 5, infoHeight + 2);
   drawSubtleMapBackground(doc, mapBox, false);
   drawOlsPolygons(doc, mapBox, mapData, { mode: 'overview' });
   drawRunway(doc, mapBox, mapData, 1.6);
 
   if (options.enabledElements.Legend) {
-    drawLegend(doc, { x: box.x + 5, y: box.y + box.height - 28, width: 46, height: 22 }, mapData);
+    drawLegend(doc, { x: box.x + 5, y: box.y + box.height - 25, width: box.width - 61, height: 21 }, mapData, { columns: 3 });
   }
 
   drawNote(doc, {
     x: box.x + box.width - 50,
     y: box.y + box.height - 25,
     width: 44,
-    height: 18,
+    height: 21,
   }, 'Note: Surfaces are drawn from project GeoJSON. Diagram is illustrative.');
 }
 
 function drawPlanPanel(doc, box, mapData, options) {
   drawPanel(doc, box, '2. PLAN VIEW - OLS');
-  const mapBox = insetBox(box, 5, 9, 5, 7);
+  const legendRail = options.enabledElements.Legend ? 54 : 5;
+  const mapBox = insetBox(box, 5, 9, legendRail, 7);
 
   drawSubtleMapBackground(doc, mapBox, options.enabledElements['Coordinate Grid']);
   drawOlsPolygons(doc, mapBox, mapData, { mode: 'plan' });
@@ -298,11 +313,11 @@ function drawPlanPanel(doc, box, mapData, options) {
   }
 
   if (options.enabledElements.Legend) {
-    drawLegend(doc, { x: box.x + box.width - 47, y: box.y + box.height - 50, width: 41, height: 32 }, mapData);
+    drawLegend(doc, { x: box.x + box.width - 51, y: box.y + 10, width: 47, height: box.height - 20 }, mapData);
   }
 
   if (options.enabledElements['Scale Bar']) {
-    drawScaleBar(doc, box.x + box.width - 46, box.y + box.height - 9, options.scale);
+    drawScaleBar(doc, mapBox.x + mapBox.width - 31, mapBox.y + mapBox.height - 2, options.scale);
   }
 }
 
@@ -352,7 +367,7 @@ function drawApproachCharts(doc, box, mapData, options) {
 
 function drawAreaChart(doc, box, mapData, options) {
   drawPanel(doc, box, '5. TYPE B AREA OBSTACLE CHART - AROUND AIRPORT');
-  const mapBox = insetBox(box, 5, 10, 5, 8);
+  const mapBox = insetBox(box, 5, 10, 49, 8);
 
   drawSubtleMapBackground(doc, mapBox, options.enabledElements['Coordinate Grid']);
   drawConcentricCircles(doc, mapBox);
@@ -363,11 +378,11 @@ function drawAreaChart(doc, box, mapData, options) {
     drawNorthArrow(doc, mapBox.x + 7, mapBox.y + 11);
   }
 
-  drawObstacleLegend(doc, { x: box.x + box.width - 45, y: box.y + 12, width: 38, height: 20 });
+  drawObstacleLegend(doc, { x: box.x + box.width - 45, y: box.y + 12, width: 41, height: 25 });
   drawNote(doc, {
     x: box.x + box.width - 44,
     y: box.y + box.height - 30,
-    width: 38,
+    width: 41,
     height: 22,
   }, 'Heights are metres above aerodrome elevation. For illustration only.');
 }
@@ -393,15 +408,18 @@ function drawFooter(doc, box) {
 }
 
 function drawPanel(doc, box, title) {
-  setRgb(doc, 'draw', '#17324d');
-  doc.setLineWidth(0.22);
-  doc.rect(box.x, box.y, box.width, box.height);
-  setRgb(doc, 'fill', '#12638f');
-  doc.roundedRect(box.x + 1.2, box.y + 1.2, Math.min(box.width * 0.58, 95), 5.2, 0.8, 0.8, 'F');
+  setRgb(doc, 'fill', '#ffffff');
+  setRgb(doc, 'draw', '#b8c7d3');
+  doc.setLineWidth(0.18);
+  doc.roundedRect(box.x, box.y, box.width, box.height, 1.2, 1.2, 'FD');
+  setRgb(doc, 'fill', '#eef5f8');
+  doc.roundedRect(box.x + 0.6, box.y + 0.6, box.width - 1.2, 6.7, 0.8, 0.8, 'F');
+  setRgb(doc, 'fill', '#0b6f9f');
+  doc.roundedRect(box.x + 1.5, box.y + 1.5, 2.2, 4.8, 0.7, 0.7, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(5.8);
-  doc.setTextColor(255, 255, 255);
-  doc.text(title, box.x + 3, box.y + 4.8);
+  doc.setFontSize(5.7);
+  doc.setTextColor(18, 56, 80);
+  doc.text(title, box.x + 5.2, box.y + 4.9);
 }
 
 function drawSubtleMapBackground(doc, box, drawGrid) {
@@ -534,49 +552,66 @@ function drawProfileChart(doc, box, title, ostId, mapData) {
   doc.text(`${Math.round(maxDistance)} m`, plot.x + plot.width / 2, box.y + box.height - 1.5, { align: 'center' });
 }
 
-function drawLegend(doc, box, mapData) {
-  drawLegendBox(doc, box, 'LEGEND');
-  let y = box.y + 7;
+function drawLegend(doc, box, mapData, settings = {}) {
+  const items = [
+    { color: '#262b33', label: 'Runway' },
+    ...mapData.olsById.map((group) => ({ color: group.presentation.solid, label: group.presentation.label })),
+  ];
+  const columns = Math.max(1, settings.columns ?? 1);
+  const rowsPerColumn = Math.ceil(items.length / columns);
+  const columnWidth = (box.width - 6) / columns;
 
-  drawLegendItem(doc, box.x + 3, y, '#262b33', 'Runway');
-  y += 4.5;
-
-  mapData.olsById.forEach((group) => {
-    drawLegendItem(doc, box.x + 3, y, group.presentation.solid, group.presentation.label);
-    y += 4.5;
+  drawLegendBox(doc, box, 'MAP LEGEND', `${items.length} visible layers`);
+  items.forEach((item, index) => {
+    const column = Math.floor(index / rowsPerColumn);
+    const row = index % rowsPerColumn;
+    drawLegendItem(doc, box.x + 3 + column * columnWidth, box.y + 9 + row * 4.4, item.color, item.label);
   });
 }
 
 function drawObstacleLegend(doc, box) {
-  drawLegendBox(doc, box, 'LEGEND');
-  drawLegendDot(doc, box.x + 5, box.y + 7, '#57b957', 'No obstacle');
-  drawLegendDot(doc, box.x + 5, box.y + 12, '#f0c44c', 'Below OLS');
-  drawLegendDot(doc, box.x + 5, box.y + 17, '#ef4444', 'Penetrating OLS');
+  drawLegendBox(doc, box, 'OBSTACLE STATUS', 'OLS classification');
+  drawLegendDot(doc, box.x + 5, box.y + 11, '#31a354', 'No obstacle');
+  drawLegendDot(doc, box.x + 5, box.y + 16, '#e9a820', 'Below OLS');
+  drawLegendDot(doc, box.x + 5, box.y + 21, '#dc3c3c', 'Penetrating OLS');
 }
 
-function drawLegendBox(doc, box, title) {
-  setRgb(doc, 'fill', '#ffffff');
-  setRgb(doc, 'draw', '#b9c5d2');
+function drawLegendBox(doc, box, title, subtitle = '') {
+  setRgb(doc, 'fill', '#fbfcfd');
+  setRgb(doc, 'draw', '#aebdca');
   doc.roundedRect(box.x, box.y, box.width, box.height, 1.2, 1.2, 'FD');
+  setRgb(doc, 'fill', '#0b6f9f');
+  doc.roundedRect(box.x, box.y, 1.6, box.height, 0.8, 0.8, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(4.6);
-  doc.setTextColor(29, 41, 57);
-  doc.text(title, box.x + box.width / 2, box.y + 3.8, { align: 'center' });
+  doc.setFontSize(4.8);
+  doc.setTextColor(18, 56, 80);
+  doc.text(title, box.x + 3.2, box.y + 4.1);
+  if (subtitle) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(3.8);
+    doc.setTextColor(103, 119, 132);
+    doc.text(subtitle, box.x + box.width - 2.5, box.y + 4.1, { align: 'right' });
+  }
+  setRgb(doc, 'draw', '#dce4e9');
+  doc.setLineWidth(0.12);
+  doc.line(box.x + 3, box.y + 6.2, box.x + box.width - 2.5, box.y + 6.2);
 }
 
 function drawLegendItem(doc, x, y, color, label) {
   setRgb(doc, 'fill', mixWithWhite(color, 0.38));
   setRgb(doc, 'draw', color);
-  doc.rect(x, y - 2.4, 4, 3, 'FD');
+  doc.roundedRect(x, y - 2.5, 4.2, 3.1, 0.35, 0.35, 'FD');
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(4.2);
+  doc.setFontSize(4.1);
   doc.setTextColor(52, 64, 84);
-  doc.text(label, x + 5.5, y);
+  doc.text(label, x + 5.7, y);
 }
 
 function drawLegendDot(doc, x, y, color, label) {
   setRgb(doc, 'fill', color);
-  doc.circle(x, y - 1, 1.2, 'F');
+  doc.circle(x, y - 1, 1.3, 'F');
+  setRgb(doc, 'draw', mixWithWhite(color, 0.2));
+  doc.circle(x, y - 1, 1.8, 'S');
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(4.2);
   doc.setTextColor(52, 64, 84);

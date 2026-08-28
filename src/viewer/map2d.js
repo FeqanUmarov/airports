@@ -5,6 +5,7 @@ import TileLayer from 'ol/layer/Tile.js';
 import VectorLayer from 'ol/layer/Vector.js';
 import VectorSource from 'ol/source/Vector.js';
 import OSM from 'ol/source/OSM.js';
+import XYZ from 'ol/source/XYZ.js';
 import Feature from 'ol/Feature.js';
 import Polygon from 'ol/geom/Polygon.js';
 import { Fill, Stroke, Style } from 'ol/style.js';
@@ -26,17 +27,32 @@ export async function initializeMap2D({
   onStatusChange,
   onBuildingSelectionChange,
 } = {}) {
+  const osmBasemap = new TileLayer({
+    source: new OSM(),
+    visible: true,
+    properties: {
+      id: 'osm',
+      title: 'OpenStreetMap',
+      isBasemap: true,
+    },
+  });
+  const googleBasemap = new TileLayer({
+    source: new XYZ({
+      url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+      crossOrigin: 'anonymous',
+      attributions: 'Imagery © Google',
+      maxZoom: 22,
+    }),
+    visible: false,
+    properties: {
+      id: 'google-satellite',
+      title: 'Google Satellite',
+      isBasemap: true,
+    },
+  });
   const map = new Map({
     target,
-    layers: [
-      new TileLayer({
-        source: new OSM(),
-        properties: {
-          id: 'osm',
-          title: 'OpenStreetMap',
-        },
-      }),
-    ],
+    layers: [osmBasemap, googleBasemap],
     view: new View({
       projection: 'EPSG:3857',
       center: [0, 0],
@@ -121,6 +137,11 @@ export async function initializeMap2D({
     layerManager,
     measureTool,
     buildingDrawTool,
+    setBasemap(basemapId) {
+      const useGoogle = basemapId === 'google-satellite';
+      osmBasemap.setVisible(!useGoogle);
+      googleBasemap.setVisible(useGoogle);
+    },
     setIdentifyActive(isActive) {
       identifyActive = Boolean(isActive);
       if (!identifyActive) popup.overlay.setPosition(undefined);
@@ -129,7 +150,7 @@ export async function initializeMap2D({
     showBuildingFootprint(result) {
       buildingSource.clear();
       const feature = new Feature(new Polygon([result.coordinates.map((coordinate) => fromLonLat(coordinate))]));
-      feature.setProperties({ HEIGHT_M: result.heightMeters, STATUS: result.violation ? 'OLS VIOLATION' : 'CLEAR' });
+      feature.setProperties({ BİNA_HÜNDÜRLÜYÜ_M: result.heightMeters, STATUS: result.violation ? 'OLS POZUNTUSU' : 'TƏHLÜKƏSİZ' });
       feature.setStyle(new Style({
         fill: new Fill({ color: result.violation ? 'rgba(59, 130, 246, 0.22)' : 'rgba(34, 197, 94, 0.30)' }),
         stroke: new Stroke({ color: result.violation ? '#2563eb' : '#16a34a', width: 3 }),
@@ -137,7 +158,7 @@ export async function initializeMap2D({
       buildingSource.addFeature(feature);
       result.conflictPolygons.forEach((conflict) => {
         const conflictFeature = new Feature(new Polygon(conflict.coordinates.map((ring) => ring.map((coordinate) => fromLonLat(coordinate)))));
-        conflictFeature.setProperties({ SURFACE: conflict.layerTitle, STATUS: 'VIOLATION' });
+        conflictFeature.setProperties({ SƏTH: conflict.layerTitle, STATUS: 'POZUNTU' });
         conflictFeature.setStyle(new Style({
           fill: new Fill({ color: 'rgba(239, 68, 68, 0.58)' }),
           stroke: new Stroke({ color: '#facc15', width: 2.5 }),
@@ -177,14 +198,21 @@ function createPopupOverlay() {
     stopEvent: true,
   });
 
+  content.addEventListener('click', (event) => {
+    if (event.target.closest('[data-popup-close]')) {
+      overlay.setPosition(undefined);
+    }
+  });
+
   return { overlay, content };
 }
 
 function createPopupContent(feature) {
   const properties = getDisplayProperties(feature);
+  const header = createPopupHeader('Feature Attributes');
 
   if (properties.length === 0) {
-    return '<div class="popup-empty">No attributes</div>';
+    return `${header}<div class="popup-empty">No attributes</div>`;
   }
 
   const rows = properties
@@ -196,7 +224,22 @@ function createPopupContent(feature) {
     `)
     .join('');
 
-  return `<div class="popup-title">Feature Attributes</div>${rows}`;
+  return `${header}${rows}`;
+}
+
+function createPopupHeader(title) {
+  return `
+    <div class="popup-header">
+      <span class="popup-heading">
+        <span class="popup-eyebrow">Identify Result</span>
+        <span class="popup-title">${escapeHtml(title)}</span>
+      </span>
+      <button class="popup-close" type="button" data-popup-close aria-label="Close popup" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18 6 6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>`;
 }
 
 function getDisplayProperties(feature) {

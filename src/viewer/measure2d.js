@@ -5,7 +5,7 @@ import Snap from 'ol/interaction/Snap.js';
 import Overlay from 'ol/Overlay.js';
 import VectorLayer from 'ol/layer/Vector.js';
 import VectorSource from 'ol/source/Vector.js';
-import { getLength } from 'ol/sphere.js';
+import { toLonLat } from 'ol/proj.js';
 import { Fill, Circle as CircleStyle, Stroke, Style } from 'ol/style.js';
 import { unByKey } from 'ol/Observable.js';
 
@@ -13,6 +13,10 @@ const lineStyle = new Style({
   stroke: new Stroke({ color: '#facc15', width: 3, lineDash: [10, 7] }),
   image: new CircleStyle({ radius: 5, fill: new Fill({ color: '#facc15' }), stroke: new Stroke({ color: '#ffffff', width: 2 }) }),
 });
+
+const WGS84_SEMI_MAJOR_AXIS_M = 6378137;
+const WGS84_FLATTENING = 1 / 298.257223563;
+const WGS84_SEMI_MINOR_AXIS_M = WGS84_SEMI_MAJOR_AXIS_M * (1 - WGS84_FLATTENING);
 
 export function createLengthMeasureTool(map) {
   const measurementSource = new VectorSource();
@@ -45,7 +49,7 @@ export function createLengthMeasureTool(map) {
     liveOverlay = createMeasureOverlay(map, 'measurement-tooltip is-live');
     geometryListener = event.feature.getGeometry().on('change', (geometryEvent) => {
       const geometry = geometryEvent.target;
-      liveOverlay.meters = getLength(geometry);
+      liveOverlay.meters = getWgs84GeodesicLength(geometry);
       liveOverlay.element.innerHTML = formatLength(liveOverlay.meters, unit);
       liveOverlay.overlay.setPosition(geometry.getLastCoordinate());
     });
@@ -159,11 +163,83 @@ function createMeasureOverlay(map, className) {
   return { element, overlay, meters: 0 };
 }
 
+export function getWgs84GeodesicLength(geometry) {
+  const coordinates = geometry?.getCoordinates?.() ?? [];
+  let totalMeters = 0;
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const first = toLonLat(coordinates[index - 1], geometry.getProjection?.() ?? 'EPSG:3857');
+    const second = toLonLat(coordinates[index], geometry.getProjection?.() ?? 'EPSG:3857');
+    totalMeters += vincentyDistance(first, second);
+  }
+
+  return totalMeters;
+}
+
+function vincentyDistance([longitude1, latitude1], [longitude2, latitude2]) {
+  if (longitude1 === longitude2 && latitude1 === latitude2) return 0;
+
+  const toRadians = Math.PI / 180;
+  const reducedLatitude1 = Math.atan((1 - WGS84_FLATTENING) * Math.tan(latitude1 * toRadians));
+  const reducedLatitude2 = Math.atan((1 - WGS84_FLATTENING) * Math.tan(latitude2 * toRadians));
+  const longitudeDelta = (longitude2 - longitude1) * toRadians;
+  let lambda = longitudeDelta;
+  let previousLambda;
+  let sinSigma;
+  let cosSigma;
+  let sigma;
+  let sinAlpha;
+  let cosSquaredAlpha;
+  let cosTwoSigmaMidpoint;
+
+  for (let iteration = 0; iteration < 100; iteration += 1) {
+    const sinLambda = Math.sin(lambda);
+    const cosLambda = Math.cos(lambda);
+    const firstTerm = Math.cos(reducedLatitude2) * sinLambda;
+    const secondTerm = Math.cos(reducedLatitude1) * Math.sin(reducedLatitude2)
+      - Math.sin(reducedLatitude1) * Math.cos(reducedLatitude2) * cosLambda;
+    sinSigma = Math.hypot(firstTerm, secondTerm);
+    if (sinSigma === 0) return 0;
+
+    cosSigma = Math.sin(reducedLatitude1) * Math.sin(reducedLatitude2)
+      + Math.cos(reducedLatitude1) * Math.cos(reducedLatitude2) * cosLambda;
+    sigma = Math.atan2(sinSigma, cosSigma);
+    sinAlpha = Math.cos(reducedLatitude1) * Math.cos(reducedLatitude2) * sinLambda / sinSigma;
+    cosSquaredAlpha = 1 - sinAlpha ** 2;
+    cosTwoSigmaMidpoint = cosSquaredAlpha === 0
+      ? 0
+      : cosSigma - 2 * Math.sin(reducedLatitude1) * Math.sin(reducedLatitude2) / cosSquaredAlpha;
+    const coefficient = WGS84_FLATTENING / 16 * cosSquaredAlpha
+      * (4 + WGS84_FLATTENING * (4 - 3 * cosSquaredAlpha));
+    previousLambda = lambda;
+    lambda = longitudeDelta + (1 - coefficient) * WGS84_FLATTENING * sinAlpha
+      * (sigma + coefficient * sinSigma
+        * (cosTwoSigmaMidpoint + coefficient * cosSigma * (-1 + 2 * cosTwoSigmaMidpoint ** 2)));
+
+    if (Math.abs(lambda - previousLambda) <= 1e-12) break;
+  }
+
+  const squaredU = cosSquaredAlpha
+    * (WGS84_SEMI_MAJOR_AXIS_M ** 2 - WGS84_SEMI_MINOR_AXIS_M ** 2)
+    / WGS84_SEMI_MINOR_AXIS_M ** 2;
+  const coefficientA = 1 + squaredU / 16384
+    * (4096 + squaredU * (-768 + squaredU * (320 - 175 * squaredU)));
+  const coefficientB = squaredU / 1024
+    * (256 + squaredU * (-128 + squaredU * (74 - 47 * squaredU)));
+  const sigmaCorrection = coefficientB * sinSigma
+    * (cosTwoSigmaMidpoint + coefficientB / 4
+      * (cosSigma * (-1 + 2 * cosTwoSigmaMidpoint ** 2)
+        - coefficientB / 6 * cosTwoSigmaMidpoint * (-3 + 4 * sinSigma ** 2)
+          * (-3 + 4 * cosTwoSigmaMidpoint ** 2)));
+
+  return WGS84_SEMI_MINOR_AXIS_M * coefficientA * (sigma - sigmaCorrection);
+}
+
 function formatLength(meters, unit) {
   const values = {
-    cm: { value: meters * 100, suffix: 'cm', digits: meters < 1 ? 1 : 0 },
-    m: { value: meters, suffix: 'm', digits: 2 },
-    km: { value: meters / 1000, suffix: 'km', digits: 4 },
+    cm: { value: meters * 100, suffix: 'cm', digits: 1 },
+    m: { value: meters, suffix: 'm', digits: 3 },
+    km: { value: meters / 1000, suffix: 'km', digits: 6 },
   };
   const result = values[unit] ?? values.m;
   return `<strong>${result.value.toLocaleString('en-US', { maximumFractionDigits: result.digits, minimumFractionDigits: result.digits })} ${result.suffix}</strong>`;
